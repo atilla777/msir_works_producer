@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'byebug'
+
 require 'logger'
 require 'nats/client'
 require 'roda'
@@ -42,7 +44,13 @@ class Config
   end
 end
 
+module Errors
+  class EmptyMessageErorr < StandardError; end
+end
+
 class App < Roda
+  include Errors
+
   plugin :json
 
   config = Config.new.data
@@ -54,7 +62,7 @@ class App < Roda
         r.on 'message' do
           # curl -v -H "Content-Type: application/json" -X POST --data "message=ok" http://localhost:9292/api/v1/message
           r.post do
-            send_message(config, logger, config.nats_messenger_subject, message_params(r.params))
+            send_message(config, logger, config.nats_messenger_subject, message(logger, r))
           end
         end
       end
@@ -65,8 +73,12 @@ class App < Roda
     MessageToQueueService.add(config, logger, subject, message)
   end
 
-  def message_params(params)
-    params[:message]
+  def message(logger, response)
+    msg = JSON.parse(response.body.read).fetch('message', '')
+    raise EmptyMessageErorr if msg.empty?
+    msg
+  rescue EmptyMessageErorr => e
+    logger.write(:error, "Can`t send message to queue - #{e}")
   end
 end
 

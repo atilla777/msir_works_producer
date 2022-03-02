@@ -2,4 +2,4 @@
 
 require './app'
 
-run App
+run App.freeze.app

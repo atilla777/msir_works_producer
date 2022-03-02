@@ -2,6 +2,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.2)
+    byebug (11.1.3)
     nats-pure (2.0.0)
     nio4r (2.5.8)
     parallel (1.21.0)
@@ -33,6 +34,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  byebug
   nats-pure (~> 2.0.0)
   puma (~> 5.6.2)
   roda (~> 3.53.0)

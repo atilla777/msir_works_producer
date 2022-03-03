@@ -60,7 +60,7 @@ class App < Roda
     r.on 'api' do
       r.on 'v1' do
         r.on 'message' do
-          # curl -v -H "Content-Type: application/json" -X POST --data "message=ok" http://localhost:9292/api/v1/message
+          # curl -v -H "Content-Type: application/json" -X POST --data '{"message":"ok"}' http://localhost:9292/api/v1/message
           r.post do
             send_message(config, logger, config.nats_messenger_subject, message(logger, r))
           end

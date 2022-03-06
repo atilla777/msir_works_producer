@@ -14,7 +14,7 @@ class Log
   public
 
   def initialize
-    @logger = Logger.new(STDOUT)
+    @logger = Logger.new('/proc/1/fd/1')
   end
 
   def write(level, message)

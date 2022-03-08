@@ -1,10 +1,22 @@
 # frozen_string_literal: true
 
-require 'byebug'
+require 'rubygems'
+require 'bundler/setup'
+Bundler.require(:default, ENV['APP_ENV'] || :development)
 
 require 'logger'
 require 'nats/client'
-require 'roda'
+require 'opentelemetry-sdk'
+require 'opentelemetry-exporter-otlp'
+require 'opentelemetry-instrumentation-all'
+#require 'opentelemetry-instrumentation-rack'
+#require 'roda'
+
+OpenTelemetry::SDK.configure do |c|
+  c.service_name = 'msir_messenger'
+  c.use_all()
+  #c.use 'OpenTelemetry::Instrumentation::Rack'
+end
 
 class Log
   private
@@ -85,7 +97,10 @@ end
 class MessageToQueueService
   def self.add(config, logger, subject, message)
     producer ||= JetStreamProducer.new(config: config, logger: logger)
-    producer.publish(subject, message)
+    tracer = OpenTelemetry.tracer_provider.tracer('my-tracer')
+    tracer.in_span("message_to_gueue") do |span|
+      producer.publish(subject, message)
+    end
     {error: nil, ok: true} 
   end
 end

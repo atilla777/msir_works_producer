@@ -8,65 +8,25 @@ require 'logger'
 require 'nats/client'
 require 'opentelemetry-sdk'
 require 'opentelemetry-exporter-otlp'
-require 'opentelemetry-instrumentation-all'
-#require 'opentelemetry-instrumentation-rack'
-#require 'roda'
+require 'opentelemetry-instrumentation-rack'
+
+require_relative 'msir_config'
+require_relative 'msir_log'
+require_relative 'msir_errors'
+require_relative 'msir_send_message'
+require_relative 'msir_message_to_queue_service'
+require_relative 'msir_jet_stream_producer'
+
 
 OpenTelemetry::SDK.configure do |c|
-  c.service_name = 'msir_messenger'
-  c.use_all()
-  #c.use 'OpenTelemetry::Instrumentation::Rack'
-end
-
-class Log
-  private
-
-  attr_reader :logger
-
-  public
-
-  def initialize
-    @logger = Logger.new('/proc/1/fd/1')
-  end
-
-  def write(level, message)
-    logger.send(level, message)
-  end
-end
-
-class Config
-  MSIR_NATS_SERVERS = ['nats://127.0.0.1:4222']
-  MSIR_NATS_RECONNECT_TIME_WAIT = 0.5
-  MSIR_NATS_MAX_RECONNECT_ATTEMPTS = 2
-  MSIR_NATS_MESSENGER_STREAM = 'messenger'
-  MSIR_NATS_MESSENGER_SUBJECT = 'inbox'
-  MSIR_NATS_MESSENGER_DURABLE = 'messenger_cunsomer'
-
-  attr_reader :data
-
-  def initialize
-    data = {
-      nats_servers: ENV['MSIR_NATS_SERVERS']&.split(',') || MSIR_NATS_SERVERS,
-      nats_reconnect_time_wait: ENV['MSIR_NATS_RECONNECT_TIME_WAIT'] || MSIR_NATS_RECONNECT_TIME_WAIT, 
-      nats_max_reconnect_attempts: ENV['MSIR_NATS_MAX_RECONNECT_ATTEMPTS'] || MSIR_NATS_MAX_RECONNECT_ATTEMPTS,
-      nats_stream: ENV['MSIR_NATS_MESSENGER_STREAM'] || MSIR_NATS_MESSENGER_STREAM, 
-      nats_messenger_subject: ENV['MSIR_NATS_MESSENGER_SUBJECT'] || MSIR_NATS_MESSENGER_SUBJECT, 
-    }
-    @data = Struct.new(*data.keys).new(*data.values)
-  end
-end
-
-module Errors
-  class EmptyMessageErorr < StandardError; end
+  c.service_name = 'msir_works_producer'
+  c.use 'OpenTelemetry::Instrumentation::Rack'
 end
 
 class App < Roda
-  include Errors
+  include Msir::SendMessage
 
   plugin :json
-
-  config = Config.new.data
-  logger = Log.new
 
   route do |r|
     r.on 'api' do
@@ -74,58 +34,10 @@ class App < Roda
         r.on 'message' do
           # curl -v -H "Content-Type: application/json" -X POST --data '{"message":"ok"}' http://localhost:9292/api/v1/message
           r.post do
-            send_message(config, logger, config.nats_messenger_subject, message(logger, r))
+            send_message(message(r))
           end
         end
       end
     end
   end
-
-  def send_message(config, logger, subject, message)
-    MessageToQueueService.add(config, logger, subject, message)
-  end
-
-  def message(logger, response)
-    msg = JSON.parse(response.body.read).fetch('message', '')
-    raise EmptyMessageErorr if msg.empty?
-    msg
-  rescue EmptyMessageErorr => e
-    logger.write(:error, "Can`t send message to queue - #{e}")
-  end
 end
-
-class MessageToQueueService
-  def self.add(config, logger, subject, message)
-    producer ||= JetStreamProducer.new(config: config, logger: logger)
-    tracer = OpenTelemetry.tracer_provider.tracer('my-tracer')
-    tracer.in_span("message_to_gueue") do |span|
-      producer.publish(subject, message)
-    end
-    {error: nil, ok: true} 
-  end
-end
-
-class JetStreamProducer
-  attr_reader :jet_stream, :logger
-
-  def initialize(config:, logger:)
-    @logger = logger
-    cluster_opts = {
-      servers: config.nats_servers,
-      dont_randomize_servers: true,
-      reconnect_time_wait: config.nats_reconnect_time_wait,
-      max_reconnect_attempts: config.nats_max_reconnect_attempts
-    }
-
-    connect = NATS.connect(cluster_opts)
-    logger.write(:info, "Connected to #{connect.connected_server}")
-    @jet_stream = connect.jetstream
-    jet_stream.add_stream(name: config.nats_stream, subjects: [config.nats_messenger_subject])
-  end
-
-  def publish(subject, message)
-    jet_stream.publish(subject, message)
-    logger.write(:info, "#{Time.now} - Send: #{message}")
-  end
-end
-

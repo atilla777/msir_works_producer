@@ -13,4 +13,5 @@ gem 'roda', '~> 3.53.0'
 group :develpment do
   gem 'byebug'
   gem 'rubocop', '~> 1.25.1'
+  gem 'solargraph'
 end

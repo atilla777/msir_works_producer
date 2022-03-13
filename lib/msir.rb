@@ -29,7 +29,7 @@ module Msir
           r.on 'message' do
             # curl -v -H "Content-Type: application/json" -X POST --data '{"message":"ok"}' http://localhost:9292/api/v1/message
             r.post do
-              send_message(message(r))
+              send_message(r)
             end
           end
         end

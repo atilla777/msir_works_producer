@@ -4,8 +4,11 @@ module Msir
   module SendMessage
     private
 
-    def send_message(message)
-      Msir::MessageToQueueService.add(Msir.config.nats_messenger_subject, message)
+    def send_message(response)
+      Msir::MessageToQueueService.add(
+        Msir.config.nats_messenger_subject,
+        message(response)
+      )
     end
 
     def message(response)
